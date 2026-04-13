@@ -24,6 +24,7 @@ export default function HomePage() {
     window.scrollTo(0, 0);
     fetchProducts();
   }, []);
+  console.log(products);
 
   // is_new=true bo'lgan mahsulotlar (backend field: is_new)
   const newProducts = products.filter((p) => p.is_new).slice(0, 4);
