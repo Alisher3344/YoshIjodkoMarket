@@ -1,79 +1,54 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from typing import Optional
-from ..database import get_db
-from ..models.models import Product
-from ..auth import admin_only
+
+from ..core.database import get_db
+from ..core.security import require_admin
+from ..crud import product as product_crud
+from ..schemas.product import ProductCreate, ProductResponse
 
 router = APIRouter()
 
-class ProductSchema(BaseModel):
-    name_uz: str
-    name_ru: str = ""
-    desc_uz: str = ""
-    desc_ru: str = ""
-    price: float
-    stock: int = 1
-    category: str = ""
-    author: str = ""
-    class_uz: str = ""
-    class_ru: str = ""
-    school: str = ""
-    district: str = ""
-    phone: str = ""
-    image: str = ""
-    is_new: bool = True
 
 @router.get("/")
 def get_products(
     category: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    q = db.query(Product)
-    if category and category != "all":
-        q = q.filter(Product.category == category)
-    if search:
-        s = f"%{search.lower()}%"
-        q = q.filter(
-            Product.name_uz.ilike(s) |
-            Product.name_ru.ilike(s) |
-            Product.author.ilike(s)
-        )
-    return q.all()
+    """Barcha mahsulotlar — category va search bo'yicha filter."""
+    return product_crud.get_all(db, category=category, search=search)
+
 
 @router.get("/{product_id}")
 def get_product(product_id: int, db: Session = Depends(get_db)):
-    product = db.query(Product).filter(Product.id == product_id).first()
+    """ID bo'yicha bitta mahsulot."""
+    product = product_crud.get_by_id(db, product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Mahsulot topilmadi")
     return product
 
-@router.post("/", dependencies=[Depends(admin_only)])
-def create_product(data: ProductSchema, db: Session = Depends(get_db)):
-    product = Product(**data.model_dump())
-    db.add(product)
-    db.commit()
-    db.refresh(product)
-    return product
 
-@router.put("/{product_id}", dependencies=[Depends(admin_only)])
-def update_product(product_id: int, data: ProductSchema, db: Session = Depends(get_db)):
-    product = db.query(Product).filter(Product.id == product_id).first()
+@router.post("/", dependencies=[Depends(require_admin)])
+def create_product(data: ProductCreate, db: Session = Depends(get_db)):
+    """Yangi mahsulot yaratish — faqat admin."""
+    return product_crud.create(db, data)
+
+
+@router.put("/{product_id}", dependencies=[Depends(require_admin)])
+def update_product(product_id: int, data: ProductCreate, db: Session = Depends(get_db)):
+    """Mahsulotni yangilash — faqat admin."""
+    product = product_crud.get_by_id(db, product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Mahsulot topilmadi")
-    for key, value in data.model_dump().items():
-        setattr(product, key, value)
-    db.commit()
-    db.refresh(product)
-    return product
+    return product_crud.update(db, product, data)
 
-@router.delete("/{product_id}", dependencies=[Depends(admin_only)])
+
+@router.delete("/{product_id}", dependencies=[Depends(require_admin)])
 def delete_product(product_id: int, db: Session = Depends(get_db)):
-    product = db.query(Product).filter(Product.id == product_id).first()
+    """Mahsulotni o'chirish — faqat admin."""
+    product = product_crud.get_by_id(db, product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Mahsulot topilmadi")
-    db.delete(product)
-    db.commit()
+    product_crud.delete(db, product)
     return {"success": True}

@@ -1,39 +1,35 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from ..database import get_db
-from ..models.models import CustomOrder
-from ..auth import admin_only
+
+from ..core.database import get_db
+from ..core.security import require_admin
+from ..crud import order as order_crud
+from ..schemas.order import CustomOrderCreate, CustomOrderStatusUpdate
 
 router = APIRouter()
 
-class CustomOrderSchema(BaseModel):
-    customer_name: str
-    customer_phone: str
-    description: str = ""
-    budget: str = ""
-    category: str = ""
-
-class StatusSchema(BaseModel):
-    status: str
 
 @router.post("/")
-def create_custom_order(data: CustomOrderSchema, db: Session = Depends(get_db)):
-    order = CustomOrder(**data.model_dump())
-    db.add(order)
-    db.commit()
-    db.refresh(order)
-    return order
+def create_custom_order(data: CustomOrderCreate, db: Session = Depends(get_db)):
+    """Yangi maxsus buyurtma — hamma foydalana oladi."""
+    return order_crud.create_custom_order(db, data)
 
-@router.get("/", dependencies=[Depends(admin_only)])
+
+@router.get("/", dependencies=[Depends(require_admin)])
 def get_custom_orders(db: Session = Depends(get_db)):
-    return db.query(CustomOrder).order_by(CustomOrder.created_at.desc()).all()
+    """Barcha maxsus buyurtmalar — faqat admin."""
+    return order_crud.get_all_custom_orders(db)
 
-@router.put("/{order_id}/status", dependencies=[Depends(admin_only)])
-def update_status(order_id: int, data: StatusSchema, db: Session = Depends(get_db)):
-    order = db.query(CustomOrder).filter(CustomOrder.id == order_id).first()
+
+@router.put("/{order_id}/status", dependencies=[Depends(require_admin)])
+def update_status(
+    order_id: int,
+    data: CustomOrderStatusUpdate,
+    db: Session = Depends(get_db),
+):
+    """Maxsus buyurtma statusini yangilash — faqat admin."""
+    order = order_crud.get_custom_order_by_id(db, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Buyurtma topilmadi")
-    order.status = data.status
-    db.commit()
+    order_crud.update_custom_order_status(db, order, data.status)
     return {"success": True}

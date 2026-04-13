@@ -1,88 +1,67 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from typing import Optional
-from ..database import get_db
-from ..models.models import User
-from ..auth import admin_only, hash_password
+
+from ..core.database import get_db
+from ..core.security import require_admin
+from ..crud import user as user_crud
+from ..schemas.user import UserCreate, UserUpdate, UserResponse
 
 router = APIRouter()
 
-class UserSchema(BaseModel):
-    name: str
-    username: str
-    password: str
-    email: str = ""
-    role: str = "admin"
 
-class UserUpdateSchema(BaseModel):
-    name: str
-    username: str
-    email: str = ""
-    role: str = "admin"
-    password: Optional[str] = None
-
-@router.get("/", dependencies=[Depends(admin_only)])
+@router.get("/", dependencies=[Depends(require_admin)])
 def get_users(db: Session = Depends(get_db)):
-    users = db.query(User).all()
+    """Barcha userlar — faqat admin."""
+    users = user_crud.get_all(db)
     return [
         {
-            "id": u.id,
-            "name": u.name,
-            "username": u.username,
-            "email": u.email,
-            "role": u.role,
-            "active": u.active,
-            "createdAt": u.created_at
+            "id":        u.id,
+            "name":      u.name,
+            "username":  u.username,
+            "email":     u.email,
+            "role":      u.role,
+            "active":    u.active,
+            "createdAt": u.created_at,
         }
         for u in users
     ]
 
-@router.post("/", dependencies=[Depends(admin_only)])
-def create_user(data: UserSchema, db: Session = Depends(get_db)):
-    exists = db.query(User).filter(User.username == data.username).first()
+
+@router.post("/", dependencies=[Depends(require_admin)])
+def create_user(data: UserCreate, db: Session = Depends(get_db)):
+    """Yangi user yaratish — faqat admin."""
+    exists = user_crud.get_by_username(db, data.username)
     if exists:
         raise HTTPException(status_code=400, detail="Bu username band")
-    user = User(
-        name=data.name,
-        username=data.username,
-        password=hash_password(data.password),
-        email=data.email,
-        role=data.role
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    user = user_crud.create(db, data)
     return {"id": user.id, "name": user.name, "username": user.username}
 
-@router.put("/{user_id}", dependencies=[Depends(admin_only)])
-def update_user(user_id: int, data: UserUpdateSchema, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
+
+@router.put("/{user_id}", dependencies=[Depends(require_admin)])
+def update_user(user_id: int, data: UserUpdate, db: Session = Depends(get_db)):
+    """User ma'lumotlarini yangilash — faqat admin."""
+    user = user_crud.get_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Foydalanuvchi topilmadi")
-    user.name = data.name
-    user.username = data.username
-    user.email = data.email
-    user.role = data.role
-    if data.password:
-        user.password = hash_password(data.password)
-    db.commit()
+    user_crud.update(db, user, data)
     return {"success": True}
 
-@router.delete("/{user_id}", dependencies=[Depends(admin_only)])
+
+@router.delete("/{user_id}", dependencies=[Depends(require_admin)])
 def delete_user(user_id: int, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
+    """Userni o'chirish — faqat admin."""
+    user = user_crud.get_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Foydalanuvchi topilmadi")
-    db.delete(user)
-    db.commit()
+    user_crud.delete(db, user)
     return {"success": True}
 
-@router.patch("/{user_id}/toggle", dependencies=[Depends(admin_only)])
+
+@router.patch("/{user_id}/toggle", dependencies=[Depends(require_admin)])
 def toggle_user(user_id: int, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
+    """Userni aktiv/blok qilish — faqat admin."""
+    user = user_crud.get_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Foydalanuvchi topilmadi")
-    user.active = not user.active
-    db.commit()
+    user_crud.toggle_active(db, user)
     return {"success": True, "active": user.active}
