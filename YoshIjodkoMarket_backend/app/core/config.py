@@ -8,7 +8,8 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str
     CLIENT_URL: str = "http://localhost:5173"
-
+    TELEGRAM_TOKEN: str = ""
+    TELEGRAM_CHAT_ID: str = ""
     class Config:
         env_file = ".env"
 
