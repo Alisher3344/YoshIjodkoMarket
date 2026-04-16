@@ -1,14 +1,25 @@
-// Barcha API so'rovlar shu fayl orqali o'tadi
-const BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+// Token faqat xotirada — localStorage ishlatilmaydi
+// Sahifa yopilsa token o'chadi, foydalanuvchi qayta login qiladi
 
-function getToken() {
-  return localStorage.getItem("auth_token");
+const BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api";
+
+let _token = null;
+
+export function setToken(token) {
+  _token = token;
+}
+
+export function clearToken() {
+  _token = null;
+}
+
+export function getToken() {
+  return _token;
 }
 
 async function request(method, url, data = null) {
   const headers = { "Content-Type": "application/json" };
-  const token = getToken();
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  if (_token) headers["Authorization"] = `Bearer ${_token}`;
 
   const res = await fetch(`${BASE}${url}`, {
     method,
@@ -16,19 +27,20 @@ async function request(method, url, data = null) {
     body: data ? JSON.stringify(data) : null,
   });
 
+  if (res.status === 204) return null;
+
   const json = await res.json();
-  if (!res.ok) throw new Error(json.error || "Xatolik yuz berdi");
+  if (!res.ok)
+    throw new Error(json.detail || json.error || "Xatolik yuz berdi");
   return json;
 }
 
-// ── AUTH ──
 export const authAPI = {
   login: (username, password) =>
     request("POST", "/auth/login", { username, password }),
   me: () => request("GET", "/auth/me"),
 };
 
-// ── PRODUCTS ──
 export const productsAPI = {
   getAll: (params = {}) => {
     const q = new URLSearchParams(params).toString();
@@ -40,7 +52,6 @@ export const productsAPI = {
   delete: (id) => request("DELETE", `/products/${id}`),
 };
 
-// ── ORDERS ──
 export const ordersAPI = {
   create: (data) => request("POST", "/orders", data),
   getAll: () => request("GET", "/orders"),
@@ -48,7 +59,6 @@ export const ordersAPI = {
     request("PUT", `/orders/${id}/status`, { status }),
 };
 
-// ── CUSTOM ORDERS ──
 export const customOrdersAPI = {
   create: (data) => request("POST", "/custom-orders", data),
   getAll: () => request("GET", "/custom-orders"),
@@ -56,7 +66,6 @@ export const customOrdersAPI = {
     request("PUT", `/custom-orders/${id}/status`, { status }),
 };
 
-// ── USERS ──
 export const usersAPI = {
   getAll: () => request("GET", "/users"),
   create: (data) => request("POST", "/users", data),

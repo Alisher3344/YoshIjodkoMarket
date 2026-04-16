@@ -4,6 +4,8 @@ from sqlalchemy.sql import func
 from ..core.database import Base
 
 
+role = Column(String(50), default="admin")
+role = Column(String(50), default="viewer")
 class User(Base):
     """
     Foydalanuvchilar jadvali.

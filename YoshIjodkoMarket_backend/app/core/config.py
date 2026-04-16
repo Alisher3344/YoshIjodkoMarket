@@ -2,20 +2,15 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    # JWT sozlamalari
-    SECRET_KEY: str = "maktab-market-secret-key-2026"
+    SECRET_KEY: str
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080  # 7 kun
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080
 
-    # Database
-    DATABASE_URL: str = "sqlite:///./market.db"
-
-    # Frontend URL (CORS uchun)
+    DATABASE_URL: str
     CLIENT_URL: str = "http://localhost:5173"
 
     class Config:
         env_file = ".env"
 
 
-# Barcha joyda shu obyekt import qilinadi
 settings = Settings()

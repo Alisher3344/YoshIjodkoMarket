@@ -1,30 +1,33 @@
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from .config import settings
 
 
-# SQLite engine
-engine = create_engine(
+engine = create_async_engine(
     settings.DATABASE_URL,
-    connect_args={"check_same_thread": False}
+    echo=False,
+    pool_pre_ping=True,
 )
 
-# Har bir request uchun yangi session ochiladi
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+AsyncSessionLocal = sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
+    autocommit=False,
+    autoflush=False,
+    expire_on_commit=False,
+)
 
-# Barcha modellar shu Base dan meros oladi
-Base = declarative_base()
+
+class Base(DeclarativeBase):
+    pass
 
 
-def get_db():
-    """
-    FastAPI Depends() orqali ishlatiladi.
-    Request tugagach session avtomatik yopiladi.
-    """
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+async def get_db():
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise

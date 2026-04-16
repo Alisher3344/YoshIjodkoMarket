@@ -1,86 +1,84 @@
-import json
 from typing import Optional
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
-from ..models.order import Order, CustomOrder
+from ..models.order import Order, OrderItem, CustomOrder
 from ..schemas.order import OrderCreate, CustomOrderCreate
 
 
-# ── Oddiy buyurtmalar ──────────────────────────────────────────────────────
-
-def create_order(db: Session, data: OrderCreate) -> dict:
-    """
-    Yangi buyurtma yaratadi.
-    items listni JSON string ga o'tkazib saqlaydi.
-    Qaytishda items ni yana list ga o'giradi.
-    """
+async def create_order(db: AsyncSession, data: OrderCreate):
     order = Order(
-        customer_name    = data.customer_name,
-        customer_phone   = data.customer_phone,
-        customer_address = data.customer_address,
-        items            = json.dumps(data.items, ensure_ascii=False),
-        total            = data.total,
-        payment_method   = data.payment_method,
+        customer_name=data.customer_name,
+        customer_phone=data.customer_phone,
+        customer_address=data.customer_address,
+        total=data.total,
+        payment_method=data.payment_method,
     )
     db.add(order)
-    db.commit()
-    db.refresh(order)
+    await db.flush()
 
-    result = order.__dict__.copy()
-    result["items"] = json.loads(order.items)
-    return result
+    for item in data.items:
+        order_item = OrderItem(
+            order_id=order.id,
+            product_id=item.product_id,
+            name_uz=item.name_uz,
+            name_ru=item.name_ru,
+            price=item.price,
+            qty=item.qty,
+        )
+        db.add(order_item)
 
-
-def get_all_orders(db: Session) -> list:
-    """Barcha buyurtmalarni yangilari birinchi qaytaradi."""
-    orders = db.query(Order).order_by(Order.created_at.desc()).all()
-    result = []
-    for o in orders:
-        d = o.__dict__.copy()
-        d["items"] = json.loads(o.items or "[]")
-        result.append(d)
-    return result
-
-
-def get_order_by_id(db: Session, order_id: int) -> Optional[Order]:
-    """ID bo'yicha bitta buyurtma topadi."""
-    return db.query(Order).filter(Order.id == order_id).first()
-
-
-def update_order_status(db: Session, order: Order, status: str) -> None:
-    """Buyurtma statusini yangilaydi."""
-    order.status = status
-    db.commit()
-
-
-# ── Maxsus buyurtmalar ─────────────────────────────────────────────────────
-
-def create_custom_order(db: Session, data: CustomOrderCreate) -> CustomOrder:
-    """Yangi maxsus buyurtma yaratadi."""
-    order = CustomOrder(**data.model_dump())
-    db.add(order)
-    db.commit()
-    db.refresh(order)
+    await db.flush()
+    await db.refresh(order)
     return order
 
 
-def get_all_custom_orders(db: Session) -> list:
-    """Barcha maxsus buyurtmalarni yangilari birinchi."""
-    return (
-        db.query(CustomOrder)
-        .order_by(CustomOrder.created_at.desc())
-        .all()
+async def get_all_orders(db: AsyncSession):
+    result = await db.execute(
+        select(Order)
+        .options(selectinload(Order.items))
+        .order_by(Order.created_at.desc())
     )
+    return result.scalars().all()
 
 
-def get_custom_order_by_id(db: Session, order_id: int) -> Optional[CustomOrder]:
-    """ID bo'yicha bitta maxsus buyurtma topadi."""
-    return db.query(CustomOrder).filter(CustomOrder.id == order_id).first()
+async def get_order_by_id(db: AsyncSession, order_id: int):
+    result = await db.execute(
+        select(Order)
+        .options(selectinload(Order.items))
+        .where(Order.id == order_id)
+    )
+    return result.scalar_one_or_none()
 
 
-def update_custom_order_status(
-    db: Session, order: CustomOrder, status: str
-) -> None:
-    """Maxsus buyurtma statusini yangilaydi."""
+async def update_order_status(db: AsyncSession, order: Order, status: str):
     order.status = status
-    db.commit()
+    await db.flush()
+
+
+async def create_custom_order(db: AsyncSession, data: CustomOrderCreate):
+    order = CustomOrder(**data.model_dump())
+    db.add(order)
+    await db.flush()
+    await db.refresh(order)
+    return order
+
+
+async def get_all_custom_orders(db: AsyncSession):
+    result = await db.execute(
+        select(CustomOrder).order_by(CustomOrder.created_at.desc())
+    )
+    return result.scalars().all()
+
+
+async def get_custom_order_by_id(db: AsyncSession, order_id: int):
+    result = await db.execute(
+        select(CustomOrder).where(CustomOrder.id == order_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def update_custom_order_status(db: AsyncSession, order: CustomOrder, status: str):
+    order.status = status
+    await db.flush()

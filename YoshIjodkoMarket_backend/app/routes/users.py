@@ -1,67 +1,49 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.database import get_db
-from ..core.security import require_admin
+from ..core.security import check_role, require_superadmin
 from ..crud import user as user_crud
-from ..schemas.user import UserCreate, UserUpdate, UserResponse
+from ..schemas.user import UserCreate, UserUpdate
 
 router = APIRouter()
 
 
-@router.get("/", dependencies=[Depends(require_admin)])
-def get_users(db: Session = Depends(get_db)):
-    """Barcha userlar — faqat admin."""
-    users = user_crud.get_all(db)
-    return [
-        {
-            "id":        u.id,
-            "name":      u.name,
-            "username":  u.username,
-            "email":     u.email,
-            "role":      u.role,
-            "active":    u.active,
-            "createdAt": u.created_at,
-        }
-        for u in users
-    ]
+@router.get("/", dependencies=[Depends(check_role("admin"))])
+async def get_users(db: AsyncSession = Depends(get_db)):
+    return await user_crud.get_all(db)
 
 
-@router.post("/", dependencies=[Depends(require_admin)])
-def create_user(data: UserCreate, db: Session = Depends(get_db)):
-    """Yangi user yaratish — faqat admin."""
-    exists = user_crud.get_by_username(db, data.username)
+@router.post("/", dependencies=[Depends(check_role("admin"))])
+async def create_user(data: UserCreate, db: AsyncSession = Depends(get_db)):
+    exists = await user_crud.get_by_username(db, data.username)
     if exists:
         raise HTTPException(status_code=400, detail="Bu username band")
-    user = user_crud.create(db, data)
-    return {"id": user.id, "name": user.name, "username": user.username}
+    return await user_crud.create(db, data)
 
 
-@router.put("/{user_id}", dependencies=[Depends(require_admin)])
-def update_user(user_id: int, data: UserUpdate, db: Session = Depends(get_db)):
-    """User ma'lumotlarini yangilash — faqat admin."""
-    user = user_crud.get_by_id(db, user_id)
+@router.put("/{user_id}", dependencies=[Depends(check_role("admin"))])
+async def update_user(user_id: int, data: UserUpdate, db: AsyncSession = Depends(get_db)):
+    user = await user_crud.get_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Foydalanuvchi topilmadi")
-    user_crud.update(db, user, data)
+    await user_crud.update(db, user, data)
     return {"success": True}
 
 
-@router.delete("/{user_id}", dependencies=[Depends(require_admin)])
-def delete_user(user_id: int, db: Session = Depends(get_db)):
-    """Userni o'chirish — faqat admin."""
-    user = user_crud.get_by_id(db, user_id)
+@router.delete("/{user_id}", dependencies=[Depends(require_superadmin)])
+async def delete_user(user_id: int, db: AsyncSession = Depends(get_db)):
+    user = await user_crud.get_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Foydalanuvchi topilmadi")
-    user_crud.delete(db, user)
+    await user_crud.delete(db, user)
     return {"success": True}
 
 
-@router.patch("/{user_id}/toggle", dependencies=[Depends(require_admin)])
-def toggle_user(user_id: int, db: Session = Depends(get_db)):
-    """Userni aktiv/blok qilish — faqat admin."""
-    user = user_crud.get_by_id(db, user_id)
+@router.patch("/{user_id}/toggle", dependencies=[Depends(check_role("admin"))])
+async def toggle_user(user_id: int, db: AsyncSession = Depends(get_db)):
+    user = await user_crud.get_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Foydalanuvchi topilmadi")
-    user_crud.toggle_active(db, user)
+    await user_crud.toggle_active(db, user)
     return {"success": True, "active": user.active}

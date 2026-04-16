@@ -1,70 +1,60 @@
 from typing import Optional
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from ..models.user import User
 from ..schemas.user import UserCreate, UserUpdate
 from ..core.security import hash_password
 
 
-def get_all(db: Session) -> list:
-    """Barcha foydalanuvchilarni qaytaradi."""
-    return db.query(User).all()
+async def get_all(db: AsyncSession):
+    result = await db.execute(select(User))
+    return result.scalars().all()
 
 
-def get_by_id(db: Session, user_id: int) -> Optional[User]:
-    """ID bo'yicha bitta user topadi."""
-    return db.query(User).filter(User.id == user_id).first()
+async def get_by_id(db: AsyncSession, user_id: int):
+    result = await db.execute(select(User).where(User.id == user_id))
+    return result.scalar_one_or_none()
 
 
-def get_by_username(db: Session, username: str) -> Optional[User]:
-    """Login uchun username bo'yicha topadi."""
-    return db.query(User).filter(User.username == username).first()
+async def get_by_username(db: AsyncSession, username: str):
+    result = await db.execute(select(User).where(User.username == username))
+    return result.scalar_one_or_none()
 
 
-def create(db: Session, data: UserCreate) -> User:
-    """
-    Yangi user yaratadi.
-    Parolni saqlashdan oldin hash qiladi.
-    """
+async def create(db: AsyncSession, data: UserCreate):
     user = User(
-        name     = data.name,
-        username = data.username,
-        password = hash_password(data.password),
-        email    = data.email,
-        role     = data.role,
+        name=data.name,
+        username=data.username,
+        password=hash_password(data.password),
+        email=data.email,
+        role=data.role,
     )
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    await db.flush()
+    await db.refresh(user)
     return user
 
 
-def update(db: Session, user: User, data: UserUpdate) -> User:
-    """
-    User ma'lumotlarini yangilaydi.
-    Yangi parol berilsa hash qilinadi.
-    Berilmasa eski parol o'zgarmaydi.
-    """
-    user.name     = data.name
+async def update(db: AsyncSession, user: User, data: UserUpdate):
+    user.name = data.name
     user.username = data.username
-    user.email    = data.email
-    user.role     = data.role
+    user.email = data.email
+    user.role = data.role
     if data.password:
         user.password = hash_password(data.password)
-    db.commit()
-    db.refresh(user)
+    await db.flush()
+    await db.refresh(user)
     return user
 
 
-def delete(db: Session, user: User) -> None:
-    """Userni o'chiradi."""
-    db.delete(user)
-    db.commit()
+async def delete(db: AsyncSession, user: User):
+    await db.delete(user)
+    await db.flush()
 
 
-def toggle_active(db: Session, user: User) -> User:
-    """Userni aktiv yoki blok holatiga o'tkazadi."""
+async def toggle_active(db: AsyncSession, user: User):
     user.active = not user.active
-    db.commit()
-    db.refresh(user)
+    await db.flush()
+    await db.refresh(user)
     return user

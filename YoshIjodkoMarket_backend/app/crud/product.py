@@ -1,60 +1,47 @@
 from typing import Optional
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, or_
 
 from ..models.product import Product
 from ..schemas.product import ProductCreate
 
 
-def get_all(
-    db: Session,
-    category: Optional[str] = None,
-    search: Optional[str] = None,
-) -> list:
-    """
-    Barcha mahsulotlarni qaytaradi.
-    category berilsa — shu kategoriya bo'yicha filter qiladi.
-    search berilsa — nom va muallif bo'yicha qidiradi.
-    """
-    q = db.query(Product)
-
+async def get_all(db: AsyncSession, category=None, search=None):
+    q = select(Product)
     if category and category != "all":
-        q = q.filter(Product.category == category)
-
+        q = q.where(Product.category == category)
     if search:
         s = f"%{search.lower()}%"
-        q = q.filter(
-            Product.name_uz.ilike(s)
-            | Product.name_ru.ilike(s)
-            | Product.author.ilike(s)
-        )
-
-    return q.all()
-
-
-def get_by_id(db: Session, product_id: int) -> Optional[Product]:
-    """ID bo'yicha bitta mahsulot topadi. Topilmasa None qaytaradi."""
-    return db.query(Product).filter(Product.id == product_id).first()
+        q = q.where(or_(
+            Product.name_uz.ilike(s),
+            Product.name_ru.ilike(s),
+            Product.author.ilike(s),
+        ))
+    result = await db.execute(q)
+    return result.scalars().all()
 
 
-def create(db: Session, data: ProductCreate) -> Product:
-    """Yangi mahsulot yaratadi va DB ga saqlaydi."""
+async def get_by_id(db: AsyncSession, product_id: int):
+    result = await db.execute(select(Product).where(Product.id == product_id))
+    return result.scalar_one_or_none()
+
+
+async def create(db: AsyncSession, data: ProductCreate):
     product = Product(**data.model_dump())
     db.add(product)
-    db.commit()
-    db.refresh(product)
+    await db.flush()
+    await db.refresh(product)
     return product
 
 
-def update(db: Session, product: Product, data: ProductCreate) -> Product:
-    """Mavjud mahsulotni yangilaydi."""
+async def update(db: AsyncSession, product: Product, data: ProductCreate):
     for key, value in data.model_dump().items():
         setattr(product, key, value)
-    db.commit()
-    db.refresh(product)
+    await db.flush()
+    await db.refresh(product)
     return product
 
 
-def delete(db: Session, product: Product) -> None:
-    """Mahsulotni o'chiradi."""
-    db.delete(product)
-    db.commit()
+async def delete(db: AsyncSession, product: Product):
+    await db.delete(product)
+    await db.flush()
