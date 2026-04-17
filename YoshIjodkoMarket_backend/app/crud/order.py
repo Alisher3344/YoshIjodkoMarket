@@ -19,13 +19,27 @@ async def create_order(db: AsyncSession, data: OrderCreate):
     await db.flush()
 
     for item in data.items:
+        # item dict yoki object bo'lishi mumkin
+        if isinstance(item, dict):
+            product_id = item.get("product_id")
+            name_uz    = item.get("name_uz", "")
+            name_ru    = item.get("name_ru", "")
+            price      = item.get("price", 0)
+            qty        = item.get("qty", 1)
+        else:
+            product_id = item.product_id
+            name_uz    = item.name_uz
+            name_ru    = item.name_ru
+            price      = item.price
+            qty        = item.qty
+
         order_item = OrderItem(
-            order_id=order.id,
-            product_id=item.product_id,
-            name_uz=item.name_uz,
-            name_ru=item.name_ru,
-            price=item.price,
-            qty=item.qty,
+            order_id   = order.id,
+            product_id = product_id,
+            name_uz    = name_uz,
+            name_ru    = name_ru,
+            price      = price,
+            qty        = qty,
         )
         db.add(order_item)
 

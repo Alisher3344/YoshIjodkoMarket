@@ -43,37 +43,71 @@ export default function CheckoutPage() {
     }
     setLoading(true);
 
-    // Backendga buyurtma yuboramiz
-    const orderData = {
-      customer_name: form.name,
-      customer_phone: form.phone,
-      customer_address: form.address,
-      payment_method: form.payment,
-      // items ni backend kutgan formatda
-      items: items.map((i) => ({
-        id: i.id,
-        name_uz: i.name_uz,
-        name_ru: i.name_ru,
-        price: i.price,
-        qty: i.qty,
-      })),
-      total,
-    };
+    try {
+      const orderData = {
+        customer_name: form.name,
+        customer_phone: form.phone,
+        customer_address: form.address,
+        payment_method: form.payment,
+        items: items.map((i) => ({
+          product_id: i.id,
+          name_uz: i.name_uz,
+          name_ru: i.name_ru || "",
+          price: i.price,
+          qty: i.qty,
+        })),
+        total,
+      };
 
-    const id = await addOrder(orderData);
+      const id = await addOrder(orderData);
 
-    if (id) {
-      clearCart();
-      setOrderId(id);
-      setSubmitted(true);
-      toast.success(
-        lang === "uz" ? "Buyurtma qabul qilindi!" : "Заказ принят!"
-      );
-    } else {
+      if (id) {
+        const paymentLabels = {
+          cash: "Naqd pul",
+          click: "Click",
+          payme: "Payme",
+          uzum: "Uzum Bank",
+        };
+
+        await fetch("http://127.0.0.1:8000/api/contact", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: form.name,
+            phone: form.phone,
+            message:
+              `🛒 YANGI BUYURTMA #${id}\n\n` +
+              `👤 Mijoz: ${form.name}\n` +
+              `📞 Telefon: ${form.phone}\n` +
+              `📍 Manzil: ${form.address}\n` +
+              `💳 To'lov: ${paymentLabels[form.payment] || form.payment}\n` +
+              `💰 Jami: ${total.toLocaleString("uz-UZ")} so'm\n\n` +
+              `📦 Mahsulotlar:\n` +
+              items
+                .map(
+                  (i) =>
+                    `  • ${i.name_uz} x${i.qty} — ${(
+                      i.price * i.qty
+                    ).toLocaleString("uz-UZ")} so'm`
+                )
+                .join("\n"),
+          }),
+        });
+
+        clearCart();
+        setOrderId(id);
+        setSubmitted(true);
+        toast.success(
+          lang === "uz" ? "Buyurtma qabul qilindi!" : "Заказ принят!"
+        );
+      } else {
+        toast.error(lang === "uz" ? "Xatolik yuz berdi" : "Произошла ошибка");
+      }
+    } catch {
       toast.error(lang === "uz" ? "Xatolik yuz berdi" : "Произошла ошибка");
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   if (items.length === 0 && !submitted) {
@@ -131,31 +165,6 @@ export default function CheckoutPage() {
     { id: "uzum", label: t("pay_uzum"), icon: "🟣" },
   ];
 
-  const Field = ({ name, label, type = "text", placeholder }) => (
-    <div>
-      <label className="block text-sm font-bold text-gray-700 mb-1.5">
-        {label}
-      </label>
-      <input
-        type={type}
-        value={form[name]}
-        onChange={(e) => {
-          setForm({ ...form, [name]: e.target.value });
-          setErrors({ ...errors, [name]: "" });
-        }}
-        placeholder={placeholder}
-        className={`w-full px-4 py-3 rounded-xl border-2 outline-none transition-colors text-sm ${
-          errors[name]
-            ? "border-red-400 bg-red-50"
-            : "border-gray-200 focus:border-[#4c1d95]"
-        }`}
-      />
-      {errors[name] && (
-        <p className="text-red-500 text-xs mt-1">{errors[name]}</p>
-      )}
-    </div>
-  );
-
   return (
     <div className="min-h-screen bg-gray-50 pt-20">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10">
@@ -178,27 +187,85 @@ export default function CheckoutPage() {
                 {lang === "uz" ? "Aloqa ma'lumotlari" : "Контактные данные"}
               </h3>
               <div className="space-y-4">
-                <Field
-                  name="name"
-                  label={t("checkout_name")}
-                  placeholder={lang === "uz" ? "Ism Familiya" : "Имя Фамилия"}
-                />
-                <Field
-                  name="phone"
-                  label={t("checkout_phone")}
-                  type="tel"
-                  placeholder="+998 90 000 00 00"
-                />
-                <Field
-                  name="address"
-                  label={t("checkout_address")}
-                  placeholder={
-                    lang === "uz" ? "Shahar, ko'cha, uy" : "Город, улица, дом"
-                  }
-                />
+                {/* Ism */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1.5">
+                    {t("checkout_name")}
+                  </label>
+                  <input
+                    type="text"
+                    value={form.name}
+                    onChange={(e) => {
+                      setForm({ ...form, name: e.target.value });
+                      setErrors({ ...errors, name: "" });
+                    }}
+                    placeholder={lang === "uz" ? "Ism Familiya" : "Имя Фамилия"}
+                    className={`w-full px-4 py-3 rounded-xl border-2 outline-none transition-colors text-sm ${
+                      errors.name
+                        ? "border-red-400 bg-red-50"
+                        : "border-gray-200 focus:border-[#4c1d95]"
+                    }`}
+                  />
+                  {errors.name && (
+                    <p className="text-red-500 text-xs mt-1">{errors.name}</p>
+                  )}
+                </div>
+
+                {/* Telefon */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1.5">
+                    {t("checkout_phone")}
+                  </label>
+                  <input
+                    type="tel"
+                    value={form.phone}
+                    onChange={(e) => {
+                      setForm({ ...form, phone: e.target.value });
+                      setErrors({ ...errors, phone: "" });
+                    }}
+                    placeholder="+998 90 000 00 00"
+                    className={`w-full px-4 py-3 rounded-xl border-2 outline-none transition-colors text-sm ${
+                      errors.phone
+                        ? "border-red-400 bg-red-50"
+                        : "border-gray-200 focus:border-[#4c1d95]"
+                    }`}
+                  />
+                  {errors.phone && (
+                    <p className="text-red-500 text-xs mt-1">{errors.phone}</p>
+                  )}
+                </div>
+
+                {/* Manzil */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1.5">
+                    {t("checkout_address")}
+                  </label>
+                  <input
+                    type="text"
+                    value={form.address}
+                    onChange={(e) => {
+                      setForm({ ...form, address: e.target.value });
+                      setErrors({ ...errors, address: "" });
+                    }}
+                    placeholder={
+                      lang === "uz" ? "Shahar, ko'cha, uy" : "Город, улица, дом"
+                    }
+                    className={`w-full px-4 py-3 rounded-xl border-2 outline-none transition-colors text-sm ${
+                      errors.address
+                        ? "border-red-400 bg-red-50"
+                        : "border-gray-200 focus:border-[#4c1d95]"
+                    }`}
+                  />
+                  {errors.address && (
+                    <p className="text-red-500 text-xs mt-1">
+                      {errors.address}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
 
+            {/* To'lov */}
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
               <h3 className="font-black text-[#4c1d95] text-lg mb-5 font-serif flex items-center gap-2">
                 <CreditCard className="w-5 h-5 text-purple-500" />
