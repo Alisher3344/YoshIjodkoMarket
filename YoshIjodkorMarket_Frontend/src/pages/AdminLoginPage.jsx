@@ -72,8 +72,8 @@ export default function AdminLoginPage() {
           <div className="bg-[#ede9fe] border border-[#4c1d95]/20 rounded-xl p-3 mb-6">
             <p className="text-xs text-[#4c1d95] font-semibold text-center">
               {lang === "uz"
-                ? "Login: admin | Parol: admin123"
-                : "Логин: admin | Пароль: admin123"}
+                ? "Assalomu alaykum, xush kelibsiz!"
+                : "Ассаламу алейкум, добро пожаловать!"}
             </p>
           </div>
 
